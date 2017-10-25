@@ -56,6 +56,17 @@ const (
 	RecordingPath = "recordings"
 	// TranscriptionPath represents the path to the Transcription resource.
 	TranscriptionPath = "transcriptions"
+	// WebhookPath represents the path to the Webhook resource.
+	WebhookPath = "webhooks"
+)
+
+const (
+	// Get represents the get resource constant.
+	Get = "GET"
+	// Post represents the post resource constant.
+	Post = "POST"
+	// Delete represents the delete resource constant.
+	Delete = "Delete"
 )
 
 var (
@@ -78,35 +89,36 @@ func New(AccessKey string) *Client {
 	return &Client{AccessKey: AccessKey, HTTPClient: &http.Client{}}
 }
 
-func (c *Client) createRequest(endpoint string, path string, params *url.Values) (*http.Request, error) {
+func (c *Client) createRequest(method string, endpoint string, path string, params *url.Values) (*http.Request, error) {
 	uri, err := url.Parse(endpoint + "/" + path)
 	if err != nil {
 		return nil, err
 	}
 
 	var request *http.Request
+
 	if params != nil {
 		body := params.Encode()
-		if request, err = http.NewRequest("POST", uri.String(), strings.NewReader(body)); err != nil {
+		if request, err = http.NewRequest(method, uri.String(), strings.NewReader(body)); err != nil {
 			return nil, err
 		}
 
 		if c.DebugLog != nil {
 			if unescapedBody, queryError := url.QueryUnescape(body); queryError == nil {
-				log.Printf("HTTP REQUEST: POST %s %s", uri.String(), unescapedBody)
+				log.Printf("HTTP REQUEST: %s %s %s", method, uri.String(), unescapedBody)
 			} else {
-				log.Printf("HTTP REQUEST: POST %s %s", uri.String(), body)
+				log.Printf("HTTP REQUEST: %s %s %s", method, uri.String(), body)
 			}
 		}
 
 		request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	} else {
-		if request, err = http.NewRequest("GET", uri.String(), nil); err != nil {
+		if request, err = http.NewRequest(method, uri.String(), nil); err != nil {
 			return nil, err
 		}
 
 		if c.DebugLog != nil {
-			log.Printf("HTTP REQUEST: GET %s", uri.String())
+			log.Printf("HTTP REQUEST: %s %s", method, uri.String())
 		}
 	}
 
@@ -117,7 +129,7 @@ func (c *Client) createRequest(endpoint string, path string, params *url.Values)
 	return request, nil
 }
 
-func (c *Client) createJSONRequest(endpoint string, path string, params interface{}) (*http.Request, error) {
+func (c *Client) createJSONRequest(method string, endpoint string, path string, params interface{}) (*http.Request, error) {
 	uri, err := url.Parse(endpoint + "/" + path)
 	if err != nil {
 		return nil, err
@@ -128,7 +140,7 @@ func (c *Client) createJSONRequest(endpoint string, path string, params interfac
 		return nil, err
 	}
 
-	request, err := http.NewRequest("POST", uri.String(), bytes.NewBuffer(jsonEncoded))
+	request, err := http.NewRequest(method, uri.String(), bytes.NewBuffer(jsonEncoded))
 	if err != nil {
 		return nil, err
 	}
@@ -165,8 +177,10 @@ func (c *Client) request(v interface{}, request *http.Request) error {
 		return ErrUnexpectedResponse
 	}
 
-	if err = json.Unmarshal(responseBody, &v); err != nil {
-		return err
+	if v != nil {
+		if err = json.Unmarshal(responseBody, &v); err != nil {
+			return err
+		}
 	}
 
 	// Status codes 200 and 201 are indicative of being able to convert the
@@ -182,7 +196,7 @@ func (c *Client) request(v interface{}, request *http.Request) error {
 // Balance returns the balance information for the account that is associated
 // with the access key.
 func (c *Client) Balance() (*Balance, error) {
-	request, err := c.createRequest(RestEndpoint, BalancePath, nil)
+	request, err := c.createRequest(Get, RestEndpoint, BalancePath, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -202,7 +216,7 @@ func (c *Client) Balance() (*Balance, error) {
 // HLR looks up an existing HLR object for the specified id that was previously
 // created by the NewHLR function.
 func (c *Client) HLR(id string) (*HLR, error) {
-	request, err := c.createRequest(RestEndpoint, HLRPath+"/"+id, nil)
+	request, err := c.createRequest(Get, RestEndpoint, HLRPath+"/"+id, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -222,7 +236,7 @@ func (c *Client) HLR(id string) (*HLR, error) {
 // HLRs lists all HLR objects that were previously created by the NewHLR
 // function.
 func (c *Client) HLRs() (*HLRList, error) {
-	request, err := c.createRequest(RestEndpoint, HLRPath, nil)
+	request, err := c.createRequest(Get, RestEndpoint, HLRPath, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -246,7 +260,7 @@ func (c *Client) NewHLR(msisdn, reference string) (*HLR, error) {
 		"reference": {reference},
 	}
 
-	request, err := c.createRequest(RestEndpoint, HLRPath, params)
+	request, err := c.createRequest(Post, RestEndpoint, HLRPath, params)
 	if err != nil {
 		return nil, err
 	}
@@ -265,7 +279,7 @@ func (c *Client) NewHLR(msisdn, reference string) (*HLR, error) {
 
 // Message retrieves the information of an existing Message.
 func (c *Client) Message(id string) (*Message, error) {
-	request, err := c.createRequest(RestEndpoint, MessagePath+"/"+id, nil)
+	request, err := c.createRequest(Get, RestEndpoint, MessagePath+"/"+id, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -284,7 +298,7 @@ func (c *Client) Message(id string) (*Message, error) {
 
 // Messages retrieves all messages of the user represented as a MessageList object.
 func (c *Client) Messages() (*MessageList, error) {
-	request, err := c.createRequest(RestEndpoint, MessagePath, nil)
+	request, err := c.createRequest(Get, RestEndpoint, MessagePath, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -312,7 +326,7 @@ func (c *Client) NewMessage(originator string, recipients []string, body string,
 	params.Set("body", body)
 	params.Set("recipients", strings.Join(recipients, ","))
 
-	request, err := c.createRequest(RestEndpoint, MessagePath, params)
+	request, err := c.createRequest(Post, RestEndpoint, MessagePath, params)
 	if err != nil {
 		return nil, err
 	}
@@ -331,7 +345,7 @@ func (c *Client) NewMessage(originator string, recipients []string, body string,
 
 // MMSMessage retrieves the information of an existing MmsMessage.
 func (c *Client) MMSMessage(id string) (*MMSMessage, error) {
-	request, err := c.createRequest(RestEndpoint, MMSPath+"/"+id, nil)
+	request, err := c.createRequest(Get, RestEndpoint, MMSPath+"/"+id, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -358,7 +372,7 @@ func (c *Client) NewMMSMessage(originator string, recipients []string, msgParams
 	params.Set("originator", originator)
 	params.Set("recipients", strings.Join(recipients, ","))
 
-	request, err := c.createRequest(RestEndpoint, MMSPath, params)
+	request, err := c.createRequest(Post, RestEndpoint, MMSPath, params)
 	if err != nil {
 		return nil, err
 	}
@@ -377,7 +391,7 @@ func (c *Client) NewMMSMessage(originator string, recipients []string, msgParams
 
 // VoiceMessage retrieves the information of an existing VoiceMessage.
 func (c *Client) VoiceMessage(id string) (*VoiceMessage, error) {
-	request, err := c.createRequest(RestEndpoint, VoiceMessagePath+"/"+id, nil)
+	request, err := c.createRequest(Get, RestEndpoint, VoiceMessagePath+"/"+id, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -396,7 +410,7 @@ func (c *Client) VoiceMessage(id string) (*VoiceMessage, error) {
 
 // VoiceMessages retrieves all VoiceMessages of the user.
 func (c *Client) VoiceMessages() (*VoiceMessageList, error) {
-	request, err := c.createRequest(RestEndpoint, VoiceMessagePath, nil)
+	request, err := c.createRequest(Get, RestEndpoint, VoiceMessagePath, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -419,7 +433,7 @@ func (c *Client) NewVoiceMessage(recipients []string, body string, params *Voice
 	urlParams.Set("body", body)
 	urlParams.Set("recipients", strings.Join(recipients, ","))
 
-	request, err := c.createRequest(RestEndpoint, VoiceMessagePath, urlParams)
+	request, err := c.createRequest(Post, RestEndpoint, VoiceMessagePath, urlParams)
 	if err != nil {
 		return nil, err
 	}
@@ -441,7 +455,7 @@ func (c *Client) NewVerify(recipient string, params *VerifyParams) (*Verify, err
 	urlParams := paramsForVerify(params)
 	urlParams.Set("recipient", recipient)
 
-	request, err := c.createRequest(RestEndpoint, VerifyPath, urlParams)
+	request, err := c.createRequest(Post, RestEndpoint, VerifyPath, urlParams)
 	if err != nil {
 		return nil, err
 	}
@@ -465,7 +479,7 @@ func (c *Client) VerifyToken(id, token string) (*Verify, error) {
 
 	path := VerifyPath + "/" + id + "?" + params.Encode()
 
-	request, err := c.createRequest(RestEndpoint, path, nil)
+	request, err := c.createRequest(Get, RestEndpoint, path, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -487,7 +501,7 @@ func (c *Client) Lookup(phoneNumber string, params *LookupParams) (*Lookup, erro
 	urlParams := paramsForLookup(params)
 	path := LookupPath + "/" + phoneNumber + "?" + urlParams.Encode()
 
-	request, err := c.createRequest(RestEndpoint, path, nil)
+	request, err := c.createRequest(Get, RestEndpoint, path, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -509,7 +523,7 @@ func (c *Client) NewLookupHLR(phoneNumber string, params *LookupParams) (*HLR, e
 	urlParams := paramsForLookup(params)
 	path := LookupPath + "/" + phoneNumber + "/hlr"
 
-	request, err := c.createRequest(RestEndpoint, path, urlParams)
+	request, err := c.createRequest(Post, RestEndpoint, path, urlParams)
 	if err != nil {
 		return nil, err
 	}
@@ -531,7 +545,7 @@ func (c *Client) LookupHLR(phoneNumber string, params *LookupParams) (*HLR, erro
 	urlParams := paramsForLookup(params)
 	path := LookupPath + "/" + phoneNumber + "/hlr?" + urlParams.Encode()
 
-	request, err := c.createRequest(RestEndpoint, path, nil)
+	request, err := c.createRequest(Get, RestEndpoint, path, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -550,7 +564,7 @@ func (c *Client) LookupHLR(phoneNumber string, params *LookupParams) (*HLR, erro
 
 // CallFlow retrieves the existing CallFlow with the specified id.
 func (c *Client) CallFlow(id string) (*CallFlow, error) {
-	request, err := c.createRequest(VoiceEndpoint, CallFlowPath+"/"+id, nil)
+	request, err := c.createRequest(Get, VoiceEndpoint, CallFlowPath+"/"+id, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -568,7 +582,7 @@ func (c *Client) CallFlow(id string) (*CallFlow, error) {
 
 // CallFlows retrieves all the CallFlows of the user.
 func (c *Client) CallFlows() (*CallFlowList, error) {
-	request, err := c.createRequest(VoiceEndpoint, CallFlowPath, nil)
+	request, err := c.createRequest(Get, VoiceEndpoint, CallFlowPath, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -586,7 +600,7 @@ func (c *Client) CallFlows() (*CallFlowList, error) {
 
 // NewCallFlow creates a new CallFlow.
 func (c *Client) NewCallFlow(params *CallFlowParams) (*CallFlow, error) {
-	request, err := c.createJSONRequest(VoiceEndpoint, CallFlowPath, params)
+	request, err := c.createJSONRequest(Post, VoiceEndpoint, CallFlowPath, params)
 	if err != nil {
 		return nil, err
 	}
@@ -605,7 +619,7 @@ func (c *Client) NewCallFlow(params *CallFlowParams) (*CallFlow, error) {
 
 // Call retrieves the existing call with the specified ID.
 func (c *Client) Call(id string) (*Call, error) {
-	request, err := c.createRequest(VoiceEndpoint, CallPath+"/"+id, nil)
+	request, err := c.createRequest(Get, VoiceEndpoint, CallPath+"/"+id, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -624,7 +638,7 @@ func (c *Client) Call(id string) (*Call, error) {
 
 // Calls retrieves all the Calls of the user.
 func (c *Client) Calls() (*CallList, error) {
-	request, err := c.createRequest(VoiceEndpoint, CallPath, nil)
+	request, err := c.createRequest(Get, VoiceEndpoint, CallPath, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -643,7 +657,7 @@ func (c *Client) Calls() (*CallList, error) {
 
 // NewCall creates a new Call resource.
 func (c *Client) NewCall(params *CallParams) (*Call, error) {
-	request, err := c.createJSONRequest(VoiceEndpoint, CallPath, params)
+	request, err := c.createJSONRequest(Post, VoiceEndpoint, CallPath, params)
 	if err != nil {
 		return nil, err
 	}
@@ -662,7 +676,7 @@ func (c *Client) NewCall(params *CallParams) (*Call, error) {
 
 // Leg returns the existing Leg resource with the given legID that belongs to the given Call.
 func (c *Client) Leg(callID string, legID string) (*Leg, error) {
-	request, err := c.createRequest(VoiceEndpoint, CallPath+"/"+callID+"/"+LegPath+"/"+legID, nil)
+	request, err := c.createRequest(Get, VoiceEndpoint, CallPath+"/"+callID+"/"+LegPath+"/"+legID, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -681,7 +695,7 @@ func (c *Client) Leg(callID string, legID string) (*Leg, error) {
 
 // Legs returns all the Legs belonging to the given Call.
 func (c *Client) Legs(callID string) (*LegList, error) {
-	request, err := c.createRequest(VoiceEndpoint, CallPath+"/"+callID+"/"+LegPath, nil)
+	request, err := c.createRequest(Get, VoiceEndpoint, CallPath+"/"+callID+"/"+LegPath, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -701,7 +715,7 @@ func (c *Client) Legs(callID string) (*LegList, error) {
 // Recording returns the existing Recording resource.
 func (c *Client) Recording(callID string, legID string, recordingID string) (*Recording, error) {
 	var path = CallPath + "/" + callID + "/" + LegPath + "/" + legID + "/" + RecordingPath + "/" + recordingID
-	request, err := c.createRequest(VoiceEndpoint, path, nil)
+	request, err := c.createRequest(Get, VoiceEndpoint, path, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -721,7 +735,7 @@ func (c *Client) Recording(callID string, legID string, recordingID string) (*Re
 // Recordings returns all the recordings of a leg
 func (c *Client) Recordings(callID string, legID string) (*RecordingList, error) {
 	var path = CallPath + "/" + callID + "/" + LegPath + "/" + legID + "/" + RecordingPath
-	request, err := c.createRequest(VoiceEndpoint, path, nil)
+	request, err := c.createRequest(Get, VoiceEndpoint, path, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -741,7 +755,7 @@ func (c *Client) Recordings(callID string, legID string) (*RecordingList, error)
 // Transcription returns the existing Transcription resource.
 func (c *Client) Transcription(callID string, legID string, recordingID string, transcriptionID string) (*Transcription, error) {
 	var path = CallPath + "/" + callID + "/" + LegPath + "/" + legID + "/" + RecordingPath + "/" + recordingID + "/" + TranscriptionPath + "/" + transcriptionID
-	request, err := c.createRequest(VoiceEndpoint, path, nil)
+	request, err := c.createRequest(Get, VoiceEndpoint, path, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -761,7 +775,7 @@ func (c *Client) Transcription(callID string, legID string, recordingID string, 
 // Transcriptions returns all the Transcriptions of a recording
 func (c *Client) Transcriptions(callID string, legID string, recordingID string) (*TranscriptionList, error) {
 	var path = CallPath + "/" + callID + "/" + LegPath + "/" + legID + "/" + RecordingPath + "/" + TranscriptionPath
-	request, err := c.createRequest(VoiceEndpoint, path, nil)
+	request, err := c.createRequest(Get, VoiceEndpoint, path, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -781,7 +795,7 @@ func (c *Client) Transcriptions(callID string, legID string, recordingID string)
 // NewTranscriptionRequest creates a new Transcription request for the given recording
 func (c *Client) NewTranscriptionRequest(callID string, legID string, recordingID string) (*Transcription, error) {
 	var path = CallPath + "/" + callID + "/" + LegPath + "/" + legID + "/" + RecordingPath + "/" + TranscriptionPath
-	request, err := c.createJSONRequest(VoiceEndpoint, path, nil)
+	request, err := c.createJSONRequest(Post, VoiceEndpoint, path, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -796,4 +810,71 @@ func (c *Client) NewTranscriptionRequest(callID string, legID string, recordingI
 	}
 
 	return &transcriptionList.Data[0], nil
+}
+
+func (c *Client) Webhook(id string) (*Webhook, error) {
+	request, err := c.createRequest(Get, VoiceEndpoint, WebhookPath+"/"+id, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	webhookList := &WebhookList{}
+	if err = c.request(webhookList, request); err != nil {
+		if err == ErrResponse {
+			return &webhookList.Data[0], err
+		}
+
+		return nil, err
+	}
+
+	return &webhookList.Data[0], nil
+}
+
+func (c *Client) Webhooks() (*WebhookList, error) {
+	request, err := c.createRequest(Get, VoiceEndpoint, WebhookPath, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	webhookList := &WebhookList{}
+	if err = c.request(webhookList, request); err != nil {
+		if err == ErrResponse {
+			return webhookList, err
+		}
+
+		return nil, err
+	}
+
+	return webhookList, nil
+}
+
+func (c *Client) NewWebhook(params *WebhookParams) (*Webhook, error) {
+	request, err := c.createJSONRequest(Post, VoiceEndpoint, WebhookPath, params)
+	if err != nil {
+		return nil, err
+	}
+
+	webhookList := &WebhookList{}
+	if err = c.request(webhookList, request); err != nil {
+		if err == ErrResponse {
+			return &webhookList.Data[0], err
+		}
+
+		return nil, err
+	}
+
+	return &webhookList.Data[0], nil
+}
+
+func (c *Client) DeleteWebhook(id string) error {
+	request, err := c.createRequest(Delete, VoiceEndpoint, WebhookPath+"/"+id, nil)
+	if err != nil {
+		return err
+	}
+
+	if err = c.request(nil, request); err != nil {
+		return err
+	}
+
+	return nil
 }
